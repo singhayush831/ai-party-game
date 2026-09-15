@@ -15,6 +15,8 @@ function App() {
 
   const [score, setScore] = useState(5);
 
+ 
+
   const addPlayer = () => {
     setPlayers([...players, ""]);
   };
@@ -152,8 +154,24 @@ function App() {
           </button>
 
           <button
-            onClick={() => {
-              setScores(players.map(() => 0));
+            onClick={async () => {
+              const response = await fetch("http://localhost:5000/api/games", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  gameName,
+                  systemPrompt,
+                  players,
+                }),
+              });
+
+              const game = await response.json();
+
+              console.log("Game created:", game);
+
+              setScores(game.scores);
               setCurrentPlayerIndex(0);
               setScreen("game");
             }}
@@ -178,6 +196,7 @@ function App() {
       <button onClick={() => setScreen("setup")}>
         Create New Game
       </button>
+
     </div>
   );
 }
