@@ -15,6 +15,8 @@ function App() {
 
   const [score, setScore] = useState(5);
 
+  const [playerIds, setPlayerIds] = useState<string[]>([]);
+
  
 
   const addPlayer = () => {
@@ -86,9 +88,26 @@ function App() {
           <p>{score} / 10</p>
 
           <button
-            onClick={() => {
+            onClick={async () => {
+              const playerId = playerIds[currentPlayerIndex];
+
+              const response = await fetch(
+                `http://localhost:5000/api/players/${playerId}/score`,
+                {
+                  method: "PATCH",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    score: scores[currentPlayerIndex] + score,
+                  }),
+                }
+              );
+
+              const updatedPlayer = await response.json();
+
               const updatedScores = [...scores];
-              updatedScores[currentPlayerIndex] += score;
+              updatedScores[currentPlayerIndex] = updatedPlayer.score;
 
               setScores(updatedScores);
               setAiResponse("");
@@ -172,6 +191,7 @@ function App() {
               console.log("Game created:", game);
 
               setScores(game.scores);
+              setPlayerIds(game.players.map((player: { id: string }) => player.id));
               setCurrentPlayerIndex(0);
               setScreen("game");
             }}
