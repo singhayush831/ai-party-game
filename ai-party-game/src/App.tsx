@@ -1,224 +1,89 @@
 import { useState } from "react";
+import "./App.css";
+import { GameScreen } from "./components/GameScreen";
+import { HomeScreen } from "./components/HomeScreen";
+import { SetupScreen } from "./components/SetupScreen";
+import { createGame, generateQuestion, selectWinner } from "./services/api";
+import type { Game, Player } from "./types/game";
+
+const INSTRUCTIONS = [
+  "Give us a funny question",
+  "Give us a funny question about college",
+  "Ask us a riddle",
+  "Give us something challenging",
+];
 
 function App() {
-  const [screen, setScreen] = useState("home");
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
-
+  const [screen, setScreen] = useState<"home" | "setup" | "game">("home");
   const [gameName, setGameName] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [players, setPlayers] = useState<string[]>([""]);
-  const [scores, setScores] = useState<number[]>([]);
-
-
+  const [hostName, setHostName] = useState("");
+  const [players, setPlayers] = useState(["", ""]);
+  const [game, setGame] = useState<Game | null>(null);
+  const [round, setRound] = useState(1);
   const [question, setQuestion] = useState("");
-  const [aiResponse, setAiResponse] = useState("");
+  const [instruction, setInstruction] = useState(INSTRUCTIONS[0]);
+  const [winner, setWinner] = useState<Player | null>(null);
+  const [gameEnded, setGameEnded] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const [score, setScore] = useState(5);
-
-  const [playerIds, setPlayerIds] = useState<string[]>([]);
-
- 
-
-  const addPlayer = () => {
-    setPlayers([...players, ""]);
+  const runRequest = async (request: () => Promise<void>) => {
+    setLoading(true);
+    setError("");
+    try {
+      await request();
+    } catch (requestError) {
+      const message = requestError instanceof Error ? requestError.message : "";
+      setError(message === "Failed to fetch" ? "Something went wrong. Please try again." : message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const updatePlayer = (index: number, value: string) => {
-    const updatedPlayers = [...players];
-    updatedPlayers[index] = value;
-    setPlayers(updatedPlayers);
+  const startGame = () => runRequest(async () => {
+    const createdGame = await createGame({ gameName, hostName, players });
+    setGame(createdGame);
+    setGameEnded(false);
+    setScreen("game");
+  });
+
+  const askAi = () => {
+    if (!game) return;
+    runRequest(async () => {
+      const result = await generateQuestion(game.id, instruction);
+      setRound(result.roundNumber);
+      setQuestion(result.question);
+      setWinner(null);
+    });
   };
 
-  if (screen === "game") {
-  return (
-    <div className="app">
-      <h1>🎮 {gameName}</h1>
+  const chooseWinner = (player: Player) => {
+    if (!game) return;
+    runRequest(async () => {
+      const updatedPlayer = await selectWinner(game.id, player.id);
+      setGame((currentGame) => currentGame
+        ? { ...currentGame, players: currentGame.players.map((item) => item.id === player.id ? updatedPlayer : item) }
+        : currentGame);
+      setWinner(updatedPlayer);
+    });
+  };
 
-      <h2>
-        {players[currentPlayerIndex]}'s Turn
-      </h2>
+  const nextRound = () => {
+    setRound((currentRound) => currentRound + 1);
+    setQuestion("");
+    setWinner(null);
+    setError("");
+  };
 
-    <div>
-      <h3>🏆 Scores</h3>
-
-      {players.map((player, index) => (
-        <p key={index}>
-          {player}: {scores[index] || 0}
-        </p>
-      ))}
-    </div>
-
-      <p>Ask the AI something funny!</p>
-
-      <input
-        type="text"
-        value={question}
-        onChange={(e) => setQuestion(e.target.value)}
-        placeholder="Ask the AI something..."
-      />
-      <button
-        onClick={() => {
-          setAiResponse(
-            `Interesting question, ${players[currentPlayerIndex]}! I have absolutely no idea, but I'll pretend I do.`
-          );
-        }}
-      >
-        ASK AI
-      </button>
-
-      {aiResponse && (
-        <div>
-          <h3>🤖 AI</h3>
-          <p>{aiResponse}</p>
-      </div>
-      )}
-
-      {aiResponse && (
-        <div>
-          <h3>👨‍⚖️ Funniness Score</h3>
-
-          <input
-            type="range"
-            min="1"
-            max="10"
-            value={score}
-            onChange={(e) => setScore(Number(e.target.value))}
-          />
-
-          <p>{score} / 10</p>
-
-          <button
-            onClick={async () => {
-              const playerId = playerIds[currentPlayerIndex];
-
-              const response = await fetch(
-                `http://localhost:5000/api/players/${playerId}/score`,
-                {
-                  method: "PATCH",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    score: scores[currentPlayerIndex] + score,
-                  }),
-                }
-              );
-
-              const updatedPlayer = await response.json();
-
-              const updatedScores = [...scores];
-              updatedScores[currentPlayerIndex] = updatedPlayer.score;
-
-              setScores(updatedScores);
-              setAiResponse("");
-              setQuestion("");
-              setScore(5);
-
-              if (currentPlayerIndex === players.length - 1) {
-                setCurrentPlayerIndex(0);
-              } else {
-                setCurrentPlayerIndex(currentPlayerIndex + 1);
-              }
-            }}
-           >
-            SUBMIT SCORE
-          </button>
-        </div>
-      )}
-
-      <button onClick={() => setScreen("home")}>
-        End Game
-      </button>
-    </div>
-  );
-}
-
-  if (screen === "setup") {
-    return (
-      <div className="app">
-        <h1>⚙️ Game Setup</h1>
-
-        <div className="form">
-          <label>Game Name</label>
-
-          <input
-            type="text"
-            value={gameName}
-            onChange={(e) => setGameName(e.target.value)}
-            placeholder="Roast the Room"
-          />
-
-          <label>AI Personality</label>
-
-          <textarea
-            value={systemPrompt}
-            onChange={(e) => setSystemPrompt(e.target.value)}
-            placeholder="You are a sarcastic robot..."
-          />
-
-          <label>Players</label>
-
-          {players.map((player, index) => (
-            <input
-              key={index}
-              type="text"
-              value={player}
-              onChange={(e) => updatePlayer(index, e.target.value)}
-              placeholder={`Player ${index + 1}`}
-            />
-          ))}
-
-          <button onClick={addPlayer}>
-            + Add Player
-          </button>
-
-          <button
-            onClick={async () => {
-              const response = await fetch("http://localhost:5000/api/games", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  gameName,
-                  systemPrompt,
-                  players,
-                }),
-              });
-
-              const game = await response.json();
-
-              console.log("Game created:", game);
-
-              setScores(game.scores);
-              setPlayerIds(game.players.map((player: { id: string }) => player.id));
-              setCurrentPlayerIndex(0);
-              setScreen("game");
-            }}
-          >
-            START GAME
-          </button>
-
-          <button onClick={() => setScreen("home")}>
-            Back to Home
-          </button>
-        </div>
-      </div>
-    );
+  if (screen === "game" && game) {
+    return <GameScreen game={game} round={round} question={question} instruction={instruction} instructions={INSTRUCTIONS} winner={winner} gameEnded={gameEnded} loading={loading} error={error} onInstructionChange={setInstruction} onAskAi={askAi} onSelectWinner={chooseWinner} onNextRound={nextRound} onEndGame={() => setGameEnded(true)} onReturnHome={() => { setGameEnded(false); setGame(null); setScreen("home"); }} />;
   }
 
-  return (
-    <div className="app">
-      <h1>🤖 AI Party Game</h1>
+  if (screen === "setup") {
+    return <SetupScreen gameName={gameName} hostName={hostName} players={players} error={error} loading={loading} onGameNameChange={setGameName} onHostNameChange={setHostName} onPlayerChange={(index, value) => setPlayers((current) => current.map((player, playerIndex) => playerIndex === index ? value : player))} onAddPlayer={() => setPlayers((current) => [...current, ""])} onRemovePlayer={(index) => setPlayers((current) => current.filter((_player, playerIndex) => playerIndex !== index))} onStart={startGame} onBack={() => setScreen("home")} />;
+  }
 
-      <p>The AI is ready to play.</p>
-
-      <button onClick={() => setScreen("setup")}>
-        Create New Game
-      </button>
-
-    </div>
-  );
+  return <HomeScreen onCreateGame={() => { setError(""); setScreen("setup"); }} />;
 }
 
 export default App;
